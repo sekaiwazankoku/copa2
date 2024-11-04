@@ -1,6 +1,7 @@
 #include <iostream>
 #include <chrono>
 #include <thread>
+#include <cstring>
 #include "udp-socket.hh"
 #include "sender.hh"
 
