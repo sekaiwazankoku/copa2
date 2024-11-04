@@ -4,7 +4,24 @@
 #include "udp-socket.hh"
 #include "receiver.hh"
 
-#define BUFFER_SIZE 1500
+// Initialize receiver by binding to a specific port
+bool initialize_receiver(UDPSocket& socket, int port) {
+    try {
+        socket.bind(Address("0.0.0.0", port));
+        std::cout << "Receiver initialized and listening on port " << port << "..." << std::endl;
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to initialize receiver: " << e.what() << std::endl;
+        return false;
+    }
+}
+
+// Log packet details for debugging purposes
+void log_received_packet(const Packet& packet) {
+    auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(packet.receive_time.time_since_epoch()).count();
+    std::cout << "Received packet of size " << BUFFER_SIZE << " bytes at " << now_ms 
+              << " ms, seq_number: " << packet.seq_number << std::endl;
+}
 
 int main(int argc, char *argv[]) {
     // Command-line arguments
@@ -15,24 +32,33 @@ int main(int argc, char *argv[]) {
 
     int port = std::stoi(argv[1]);
 
-    // UDP socket setup to listen on the specified port
+    // UDP socket setup
     UDPSocket socket;
-    socket.bind(Address("0.0.0.0", port));
+    if (!initialize_receiver(socket, port)) {
+        return 1;
+    }
 
     char buffer[BUFFER_SIZE];
-
-    std::cout << "Receiver is listening on port " << port << "..." << std::endl;
+    int seq_number = 0;
 
     while (true) {
         // Receive packets
-        auto received = socket.recv(buffer, BUFFER_SIZE);
+        int received;
+        try {
+            received = socket.recv(buffer, BUFFER_SIZE);
+        } catch (const std::exception& e) {
+            std::cerr << "Failed to receive packet: " << e.what() << std::endl;
+            continue; // Continue listening even after a receive failure
+        }
 
-        // Get current timestamp
-        auto now = std::chrono::steady_clock::now();
-        auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+        // Populate the Packet structure
+        Packet packet;
+        strncpy(packet.data, buffer, received);
+        packet.seq_number = seq_number++;
+        packet.receive_time = std::chrono::steady_clock::now();
 
-        // Output for verification
-        std::cout << "Received packet of size " << received << " bytes at " << now_ms << " ms" << std::endl;
+        // Log received packet for verification
+        log_received_packet(packet);
     }
 
     return 0;
