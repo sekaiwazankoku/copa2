@@ -4,7 +4,29 @@
 #include "udp-socket.hh"
 #include "sender.hh"
 
-#define PACKET_SIZE 1500
+// Initialize the sender by setting up the socket connection
+bool initialize_sender(UDPSocket& socket, const std::string& ip, int port) {
+    try {
+        socket.connect(Address(ip, port));
+        std::cout << "Sender initialized and connected to " << ip << ":" << port << std::endl;
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to initialize sender: " << e.what() << std::endl;
+        return false;
+    }
+}
+
+// Function to send a packet via UDP socket
+bool send_packet(UDPSocket& socket, const Packet& packet) {
+    std::string packet_data(packet.data, PACKET_SIZE);
+    try {
+        socket.send(packet_data); // Sending only data, assuming other packet metadata is handled separately
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to send packet: " << e.what() << std::endl;
+        return false;
+    }
+}
 
 int main(int argc, char *argv[]) {
     // Command-line arguments
@@ -19,19 +41,22 @@ int main(int argc, char *argv[]) {
     int burst_duration = std::stoi(argv[4]); // in ms
     int inter_burst_time = std::stoi(argv[5]); // in ms
 
-    // Calculating burst rate and packet transmission delay
-    double burst_rate = static_cast<double>(burst_size) / burst_duration; // bytes per ms
-    double burst_pkt_tx_delay = PACKET_SIZE / burst_rate; // using PACKET_SIZE defined as 1500 bytes by default
-
     // UDP socket setup
     UDPSocket socket;
-    socket.connect(Address(target_ip, target_port));
+    if (!initialize_sender(socket, target_ip, target_port)) {
+        return 1;
+    }
+
+    // Calculating burst rate and packet transmission delay
+    double burst_rate = calculate_burst_rate(burst_size, burst_duration); // bytes per ms
+    double burst_pkt_tx_delay = PACKET_SIZE / burst_rate; // using PACKET_SIZE defined as 1500 bytes by default
 
     // Variables for controlling burst timing
     auto last_burst_time = std::chrono::steady_clock::now();
     auto last_send_time = std::chrono::steady_clock::now();
     int total_bytes_sent = 0;
     bool send_burst = false;
+    int seq_number = 0;
 
     while (true) {
         auto now = std::chrono::steady_clock::now();
@@ -43,8 +68,17 @@ int main(int argc, char *argv[]) {
 
         // Send packets within the burst
         if (send_burst && std::chrono::duration_cast<std::chrono::milliseconds>(now - last_send_time).count() > burst_pkt_tx_delay) {
-            std::string packet(PACKET_SIZE, 'X'); // Packet of size PACKET_SIZE bytes
-            socket.send(packet);
+            // Initialize packet directly
+            Packet packet;
+            strncpy(packet.data, std::string(PACKET_SIZE, 'X').c_str(), PACKET_SIZE);
+            packet.seq_number = seq_number++;
+            packet.send_time = std::chrono::steady_clock::now();
+
+            if (!send_packet(socket, packet)) { // Attempt to send packet
+                std::cerr << "Error in sending packet. Aborting current burst." << std::endl;
+                send_burst = false; // Exit the current burst if there's a send failure
+                continue;
+            }
 
             total_bytes_sent += PACKET_SIZE;
             last_send_time = now;
