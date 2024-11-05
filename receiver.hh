@@ -7,7 +7,7 @@
 // Constants
 #define BUFFER_SIZE 1500
 
-// Packet structure for received data
+// // Packet structure for received data
 struct Packet {
     char data[BUFFER_SIZE]; // Payload data
     int seq_number; // Sequence number for tracking

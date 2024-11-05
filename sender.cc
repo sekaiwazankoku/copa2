@@ -2,6 +2,7 @@
 #include <chrono>
 #include <thread>
 #include <cstring>
+#include<fstream>
 #include "udp-socket.hh"
 #include "sender.hh"
 
@@ -14,6 +15,25 @@ bool initialize_sender(UDPSocket& socket) {
         std::cerr << "Error: Sender socket initialization failed." << std::endl;
         return false;
     }
+}
+
+std::ofstream log_file("sender_log.txt"); // Log file for sender activity
+
+// Function to log each burst
+void log_burst(int burst_size, int total_bytes_sent) {
+    auto now = std::chrono::steady_clock::now();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    log_file << "[Burst] Time(ms): " << ms 
+             << ", Burst Size(bytes): " << burst_size 
+             << ", Total Bytes Sent: " << total_bytes_sent << std::endl;
+}
+
+// Function to log each packet sent
+void log_packet(int packet_size) {
+    auto now = std::chrono::steady_clock::now();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    log_file << "[Packet] Time(ms): " << ms 
+             << ", Packet Size(bytes): " << packet_size << std::endl;
 }
 
 // Function to send a packet via UDP socket
@@ -68,6 +88,7 @@ int main(int argc, char *argv[]) {
         // Check if it's time to start a new burst
         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_burst_time).count() > inter_burst_time) {
             send_burst = true;
+            log_burst(burst_size, total_bytes_sent);
         }
 
         // Send packets within the burst
@@ -85,6 +106,8 @@ int main(int argc, char *argv[]) {
             }
 
             total_bytes_sent += PACKET_SIZE;
+            log_packet(PACKET_SIZE);
+
             last_send_time = now;
 
             // End burst if burst_size is reached
@@ -96,6 +119,6 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    log_file.close();
     return 0;
 }
-
