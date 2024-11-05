@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
 
     // UDP socket setup
     UDPSocket socket;
-    if (!initialize_sender(socket, target_ip, target_port)) {
+    if (!initialize_sender(socket)) {
         return 1;
     }
 
