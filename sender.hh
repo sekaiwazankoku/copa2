@@ -18,7 +18,7 @@ struct Packet {
 };
 
 // Function prototypes
-bool initialize_sender(UDPSocket& socket, const std::string& ip, int port);
+bool initialize_sender(UDPSocket& socket);
 bool send_packet(UDPSocket& socket, const Packet& packet);
 double calculate_burst_rate(int burst_size, int burst_duration);
 double calculate_packet_tx_delay(double burst_rate);
