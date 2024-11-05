@@ -27,6 +27,11 @@ bool send_packet(UDPSocket& socket, const Packet& packet, const std::string& tar
     }
 }
 
+// Function to calculate burst rate in bytes per ms from burst size and duration
+double calculate_burst_rate(int burst_size, int burst_duration) {
+    return static_cast<double>(burst_size) / burst_duration;
+}
+
 int main(int argc, char *argv[]) {
     // Command-line arguments
     if (argc != 6) {
@@ -92,9 +97,5 @@ int main(int argc, char *argv[]) {
     }
 
     return 0;
-
-// Function to calculate burst rate in bytes per ms from burst size and duration
-double calculate_burst_rate(int burst_size, int burst_duration) {
-    return static_cast<double>(burst_size) / burst_duration;
 }
 
