@@ -6,8 +6,8 @@
 #include "sender.hh"
 
 // Initialize the sender by setting up the socket connection
-bool initialize_sender(UDPSocket& socket, const std::string& dest_ip, int dest_port) {
-    if (socket.udp_socket >= 0) { // Check if the socket descriptor is valid
+bool initialize_sender(UDPSocket& socket) {
+    if (socket.is_valid()) { // Check if the socket descriptor is valid
         std::cout << "Sender socket initialized and ready to send." << std::endl;
         return true;
     } else {
