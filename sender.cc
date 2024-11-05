@@ -17,7 +17,7 @@ bool initialize_sender(UDPSocket& socket, const std::string& dest_ip, int dest_p
 }
 
 // Function to send a packet via UDP socket
-bool send_packet(UDPSocket& socket, const Packet& packet, const std::string& dest_ip, int dest_port) {
+bool send_packet(UDPSocket& socket, const Packet& packet, const std::string& target_ip, int target_port) {
     try {
         socket.senddata(packet.data, PACKET_SIZE, target_ip, target_port); 
         return true;
