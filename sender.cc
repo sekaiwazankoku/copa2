@@ -6,22 +6,20 @@
 #include "sender.hh"
 
 // Initialize the sender by setting up the socket connection
-bool initialize_sender(UDPSocket& socket, const std::string& ip, int port) {
-    try {
-        socket.connect(Address(ip, port));
-        std::cout << "Sender initialized and connected to " << ip << ":" << port << std::endl;
+bool initialize_sender(UDPSocket& socket, const std::string& dest_ip, int dest_port) {
+    if (socket.udp_socket >= 0) { // Check if the socket descriptor is valid
+        std::cout << "Sender socket initialized and ready to send." << std::endl;
         return true;
-    } catch (const std::exception& e) {
-        std::cerr << "Failed to initialize sender: " << e.what() << std::endl;
+    } else {
+        std::cerr << "Error: Sender socket initialization failed." << std::endl;
         return false;
     }
 }
 
 // Function to send a packet via UDP socket
-bool send_packet(UDPSocket& socket, const Packet& packet) {
-    std::string packet_data(packet.data, PACKET_SIZE);
+bool send_packet(UDPSocket& socket, const Packet& packet, const std::string& dest_ip, int dest_port) {
     try {
-        socket.send(packet_data); // Sending only data, assuming other packet metadata is handled separately
+        socket.senddata(packet.data, PACKET_SIZE, target_ip, target_port); 
         return true;
     } catch (const std::exception& e) {
         std::cerr << "Failed to send packet: " << e.what() << std::endl;
@@ -75,7 +73,7 @@ int main(int argc, char *argv[]) {
             packet.seq_number = seq_number++;
             packet.send_time = std::chrono::steady_clock::now();
 
-            if (!send_packet(socket, packet)) { // Attempt to send packet
+            if (!send_packet(socket, packet, target_ip, target_port)) { // Attempt to send packet
                 std::cerr << "Error in sending packet. Aborting current burst." << std::endl;
                 send_burst = false; // Exit the current burst if there's a send failure
                 continue;
