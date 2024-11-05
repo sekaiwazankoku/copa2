@@ -31,6 +31,9 @@ public:
 
 	static void decipher_socket_addr(SockAddress addr, std::string& ip_addr, int& port);
 	static std::string decipher_socket_addr(SockAddress addr);
+
+	// New method to check if socket is valid
+    	bool is_valid() const { return udp_socket >= 0; }
 };
 
 #endif
