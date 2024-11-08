@@ -6,7 +6,7 @@
 #include "udp-socket.hh"
 #include "receiver.hh"
 
-std::ofstream log_file("receiver_log.txt"); // Log file for receiver activity
+std::ofstream log_file(); // Log file for receiver activity "receiver_log.txt"
 
 // Initialize receiver by binding to a specific port
 bool initialize_receiver(UDPSocket& socket, int port) {
@@ -26,9 +26,9 @@ void log_received_packet(const Packet& packet, int packet_size, long inter_arriv
              << ", Seq Number: " << packet.seq_number 
              << ", Packet Size(bytes): " << packet_size
              << ", Inter-arrival Time(ms): " << inter_arrival_time << std::endl;
-    std::cout << "Received packet of size " << packet_size << " bytes at " << now_ms 
-              << " ms, seq_number: " << packet.seq_number 
-              << ", Inter-arrival Time(ms): " << inter_arrival_time << std::endl;
+    // std::cout << "Received packet of size " << packet_size << " bytes at " << now_ms 
+    //           << " ms, seq_number: " << packet.seq_number 
+    //           << ", Inter-arrival Time(ms): " << inter_arrival_time << std::endl;
 }
 
 

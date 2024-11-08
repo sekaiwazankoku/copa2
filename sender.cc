@@ -17,7 +17,7 @@ bool initialize_sender(UDPSocket& socket) {
     }
 }
 
-std::ofstream log_file("sender_log.txt"); // Log file for sender activity
+std::ofstream log_file(); // Log file for sender activity "sender_log.txt"
 
 // Function to log each burst
 void log_burst(int burst_size, int total_bytes_sent) {
