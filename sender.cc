@@ -38,22 +38,22 @@ void handle_ack(const char* ack_data, std::ofstream& log_file) {
     auto now = std::chrono::steady_clock::now();
 
     {
-        std::lock_guard<std::mutex> lock(packet_mutex); // Synchronize access to unacknowledged_packets
+        // std::lock_guard<std::mutex> lock(packet_mutex); // Synchronize access to unacknowledged_packets
         if (unacknowledged_packets.find(ack_number) != unacknowledged_packets.end()) {
             total_acked_bytes += PACKET_SIZE;
-            std::lock_guard<std::mutex> log_lock(log_mutex); // Synchronize access to log_file
-            log_file << "[ACK]+: " << std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count()
-             << " ,Total bytes:" << total_acked_bytes
-             << ", Seq Number: " << ack_number
-             << std::endl;
+            // std::lock_guard<std::mutex> log_lock(log_mutex); // Synchronize access to log_file
+            // log_file << "[ACK]+: " << std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count()
+            //  << " ,Total bytes:" << total_acked_bytes
+            //  << ", Seq Number: " << ack_number
+            //  << std::endl;
             unacknowledged_packets.erase(ack_number);
         }
-        else {
-        // Log with '-' for unexpected or duplicate ACKs
-        log_file << "[ACK]-: " << std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count()
-                 << ", Seq Number: " << ack_number
-                 << std::endl;
-    }
+    //     else {
+    //     // Log with '-' for unexpected or duplicate ACKs
+    //     log_file << "[ACK]-: " << std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count()
+    //              << ", Seq Number: " << ack_number
+    //              << std::endl;
+    // }
     }
 }
 
@@ -317,7 +317,7 @@ int main(int argc, char *argv[]) {
             auto now_ms = std::chrono::steady_clock::now();
             if (std::chrono::duration_cast<std::chrono::milliseconds>(now_ms - last_log_time).count() >= 1) {
                 log_file << std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count()
-                        << " : " << total_bytes_sent << std::endl;
+                        << " : " << total_bytes_sent << " : " << total_acked_bytes << std::endl;
                 last_log_time = now_ms;
             } 
 
