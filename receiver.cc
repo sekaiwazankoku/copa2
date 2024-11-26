@@ -32,6 +32,7 @@ void log_received_packet(const Packet& packet, int packet_size, long inter_arriv
     //           << ", Inter-arrival Time(ms): " << inter_arrival_time << std::endl;
 }
 
+
 // Log interval throughput and reset for next interval
 void log_interval_throughput(int interval_bytes_received, double interval_duration_s) {
     double throughput_bps = (interval_bytes_received * 8) / interval_duration_s; // Throughput in bits per second
@@ -41,6 +42,18 @@ void log_interval_throughput(int interval_bytes_received, double interval_durati
              << ", Bytes Received: " << interval_bytes_received 
              << ", Throughput(bps): " << throughput_bps << std::endl;
     log_file.flush();
+}
+
+void send_ack(UDPSocket& socket, int ack_number, UDPSocket::SockAddress& sender_addr) {
+    try {
+        socket.senddata(reinterpret_cast<const char*>(&ack_number), sizeof(ack_number), &sender_addr); // Send ACK as binary
+        auto now_ms = std::chrono::steady_clock::now();
+        log_file << "[ACK Sent] Seq Number: " << ack_number
+                 << ", Time(ms): " << std::chrono::duration_cast<std::chrono::milliseconds>(now_ms.time_since_epoch()).count()
+                 << std::endl;
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to send ACK: " << e.what() << std::endl;
+    }
 }
 
 // Log packet details for debugging purposes
@@ -75,7 +88,7 @@ int main(int argc, char *argv[]) {
     auto last_log_time = std::chrono::steady_clock::now();
 
     char buffer[BUFFER_SIZE];
-    int seq_number = 0;
+    //int seq_number = 0;
     UDPSocket::SockAddress other_addr;
 
     auto last_receive_time = std::chrono::steady_clock::now();
@@ -108,8 +121,11 @@ int main(int argc, char *argv[]) {
         // Populate the Packet structure
         Packet packet;
         strncpy(packet.data, buffer, received);
-        packet.seq_number = seq_number++;
+        //packet.seq_number = seq_number++;
+        memcpy(&packet.seq_number, buffer, sizeof(packet.seq_number)); // Extract seq_number from received packet
         packet.receive_time = std::chrono::steady_clock::now();
+
+        send_ack(socket, packet.seq_number, other_addr);
 
         // Calculate inter-arrival time
         auto inter_arrival_time = std::chrono::duration_cast<std::chrono::milliseconds>(packet.receive_time - last_receive_time).count();
