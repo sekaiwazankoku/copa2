@@ -13,12 +13,18 @@
 
 // Declare unacknowledged_packets globally
 std::unordered_map<int, Packet> unacknowledged_packets; 
-std::mutex packet_mutex; // Mutex for packet operations
-std::mutex log_mutex;    // Mutex for log operations
+std::mutex packet_mutex;
+std::mutex log_mutex;
 
-// Initialize the sender by setting up the socket connection
+// Helper function to get sequence number from packet
+int get_sequence_number(const Packet& packet) {
+    int seq_num;
+    memcpy(&seq_num, packet.data, HEADER_SIZE);
+    return seq_num;
+}
+
 bool initialize_sender(UDPSocket& socket) {
-    if (socket.is_valid()) { // Check if the socket descriptor is valid
+    if (socket.is_valid()) {
         std::cout << "Sender socket initialized and ready to send." << std::endl;
         return true;
     } else {
@@ -27,37 +33,23 @@ bool initialize_sender(UDPSocket& socket) {
     }
 }
 
-// Global variables for throughput calculation
-size_t total_acked_bytes = 0; // Total acknowledged data in bytes
-std::chrono::steady_clock::time_point ack_start_time = std::chrono::steady_clock::now(); // Experiment start time
+size_t total_acked_bytes = 0;
+std::chrono::steady_clock::time_point ack_start_time = std::chrono::steady_clock::now();
 
 void handle_ack(const char* ack_data, std::ofstream& log_file) {
     int ack_number;
-    memcpy(&ack_number, ack_data, sizeof(ack_number)); // Decode ACK as binary
+    memcpy(&ack_number, ack_data, HEADER_SIZE);
 
     auto now = std::chrono::steady_clock::now();
 
     {
-        // std::lock_guard<std::mutex> lock(packet_mutex); // Synchronize access to unacknowledged_packets
         if (unacknowledged_packets.find(ack_number) != unacknowledged_packets.end()) {
             total_acked_bytes += PACKET_SIZE;
-            // std::lock_guard<std::mutex> log_lock(log_mutex); // Synchronize access to log_file
-            // log_file << "[ACK]+: " << std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count()
-            //  << " ,Total bytes:" << total_acked_bytes
-            //  << ", Seq Number: " << ack_number
-            //  << std::endl;
             unacknowledged_packets.erase(ack_number);
         }
-    //     else {
-    //     // Log with '-' for unexpected or duplicate ACKs
-    //     log_file << "[ACK]-: " << std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count()
-    //              << ", Seq Number: " << ack_number
-    //              << std::endl;
-    // }
     }
 }
 
-// Function to send a packet via UDP socket
 bool send_packet(UDPSocket& socket, const Packet& packet, const std::string& target_ip, int target_port) {
     try {
         socket.senddata(packet.data, PACKET_SIZE, target_ip, target_port);
@@ -68,12 +60,10 @@ bool send_packet(UDPSocket& socket, const Packet& packet, const std::string& tar
     }
 }
 
-// Function to calculate burst rate in bytes per ms from burst size and duration
 double calculate_burst_rate(int burst_size, int burst_duration) {
     return static_cast<double>(burst_size) / burst_duration;
 }
 
-// Function to launch low-rate volumetric attack (constant line rate)
 void low_rate_volumetric_attack(UDPSocket& socket, const std::string& target_ip, int target_port, double packet_interval, int duration, int& total_bytes_sent, std::ofstream& log_file) {
     int seq_number = 0;
     auto start_time = std::chrono::steady_clock::now();
@@ -85,17 +75,16 @@ void low_rate_volumetric_attack(UDPSocket& socket, const std::string& target_ip,
 
         if (elapsed_time >= duration) {
             std::cout << "Experiment duration reached. Stopping low-rate volumetric attack." << std::endl;
-            break; // Stop attack after the specified duration
+            break;
         }
 
-        // Send packet at the specified interval
         Packet packet;
-        strncpy(packet.data, std::string(PACKET_SIZE, 'X').c_str(), PACKET_SIZE);
-        packet.seq_number = seq_number++;
-        memcpy(packet.data, &packet.seq_number, sizeof(packet.seq_number));
+        std::memset(packet.data + HEADER_SIZE, 'X', PAYLOAD_SIZE);
+        memcpy(packet.data, &seq_number, HEADER_SIZE);
         packet.send_time = std::chrono::steady_clock::now();
-        // Track the packet in unacknowledged_packets
-        unacknowledged_packets[packet.seq_number] = packet;
+        
+        unacknowledged_packets[seq_number] = packet;
+        seq_number++;
 
         if (!send_packet(socket, packet, target_ip, target_port)) {
             std::cerr << "Error in sending packet. Retrying." << std::endl;
@@ -104,24 +93,24 @@ void low_rate_volumetric_attack(UDPSocket& socket, const std::string& target_ip,
 
         total_bytes_sent += PACKET_SIZE;
 
-        // Log total bytes sent every millisecond
         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_log_time).count() >= 1) {
             log_file << std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count()
                      << " : " << total_bytes_sent << std::endl;
             last_log_time = now;
         }
 
-        // Sleep to maintain line rate
         std::this_thread::sleep_for(std::chrono::duration<double, std::milli>(packet_interval));
     }
 }
 
-// Low-rate attack before the start of custom attack
 void pre_attack_phase(UDPSocket& socket, const std::string& target_ip, int target_port, int pre_attack_duration_ms, double pre_attack_rate_mbps, int& total_bytes_sent, std::ofstream& log_file, std::chrono::steady_clock::time_point& last_log_time, int& seq_number) {
-    double packet_interval_ms = 1.0 / ((pre_attack_rate_mbps * 1024 * 1024 / PACKET_SIZE) / 8); // Packet interval in ms
+double packets_per_second = (pre_attack_rate_mbps * 1024 * 1024) / (PACKET_SIZE * 8);
+    double packet_interval_ms = 1000.0 / packets_per_second;
+    
     auto start_time = std::chrono::steady_clock::now();
 
     std::cout << "Starting pre-attack phase at " << pre_attack_rate_mbps << " Mbps for " << pre_attack_duration_ms << " ms." << std::endl;
+    std::cout << "Packet interval: " << packet_interval_ms << " ms" << std::endl;  // Debug print
     log_file << "Pre attack phase:" << std::endl;
 
     while (true) {
@@ -129,24 +118,21 @@ void pre_attack_phase(UDPSocket& socket, const std::string& target_ip, int targe
         auto elapsed_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count();
 
         if (elapsed_time_ms >= pre_attack_duration_ms) {
-            std::cout << "Pre-attack phase complete. Switching to custom attack." << std::endl;
-            break; // End pre-attack phase
+            std::cout << "Pre-attack phase complete. Elapsed time: " << elapsed_time_ms << " ms" << std::endl;
+            break;
         }
 
-        // Send packet
         Packet packet;
-        strncpy(packet.data, std::string(PACKET_SIZE, 'X').c_str(), PACKET_SIZE);
-        //packet.seq_number = total_bytes_sent / PACKET_SIZE; // Sequence number based on total bytes sent
-        packet.seq_number = seq_number++;
-        memcpy(packet.data, &packet.seq_number, sizeof(packet.seq_number));
+        std::memset(packet.data + HEADER_SIZE, 'X', PAYLOAD_SIZE);
+        memcpy(packet.data, &seq_number, HEADER_SIZE);
         packet.send_time = std::chrono::steady_clock::now();
 
-        // Track the packet in unacknowledged_packets
-        unacknowledged_packets[packet.seq_number] = packet;
+        unacknowledged_packets[seq_number] = packet;
+        seq_number++;
 
         if (!send_packet(socket, packet, target_ip, target_port)) {
             std::cerr << "Error: Failed to send packet in pre-attack phase. Retrying." << std::endl;
-            continue; // Retry sending if there's an error
+            continue;
         }
 
         total_bytes_sent += PACKET_SIZE;
@@ -154,19 +140,19 @@ void pre_attack_phase(UDPSocket& socket, const std::string& target_ip, int targe
         // Log total bytes sent every millisecond
         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_log_time).count() >= 1) {
             log_file << std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count()
-                     << " : " << total_bytes_sent << std::endl;
+                     << " : " << total_bytes_sent << " : " << total_acked_bytes << std::endl;
             last_log_time = now;
         }
 
-        // Sleep to maintain the 90 Mbps line rate
+        // Sleep for the calculated interval
         std::this_thread::sleep_for(std::chrono::duration<double, std::milli>(packet_interval_ms));
     }
 
-    log_file << "End of pre attack phase." << std::endl;
+    log_file << "End of pre attack phase. Total bytes sent: " << total_bytes_sent << std::endl;
+    std::cout << "Pre-attack phase ended. Moving to custom attack..." << std::endl;
 }
 
 int main(int argc, char *argv[]) {
-    // Command-line arguments
     if (argc < 8 || argc > 9) {
         std::cerr << "Usage: " << argv[0] << " <IP> <Port> <burst_size> <burst_duration> <inter_burst_time> <logfile> <duration> [-c | -v]" << std::endl;
         return 1;
@@ -179,7 +165,6 @@ int main(int argc, char *argv[]) {
     int inter_burst_time = std::stoi(argv[5]);
     std::string logfile_name = argv[6];
     int duration = std::stoi(argv[7]);
-    //std::string attack_type = (argc == 9) ? argv[8] : "-c"; //don't keep it optional
     std::string attack_type = argv[8];
 
     if (attack_type != "-c" && attack_type != "-v") {
@@ -187,26 +172,22 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // Open log file
     std::ofstream log_file(logfile_name);
     if (!log_file.is_open() || !log_file.good()) {
         std::cerr << "Error: Unable to open log file " << logfile_name << std::endl;
         return 1;
     }
 
-    // UDP socket setup
     UDPSocket socket;
     if (!initialize_sender(socket)) {
         return 1;
     }
 
-    // Bind the socket for receiving ACKs
-    if (socket.bindsocket(target_port + 1) != 0) { // Bind to a local port
+    if (socket.bindsocket("0.0.0.0", target_port, target_port + 1) != 0) {
         std::cerr << "Error: Failed to bind socket for receiving ACKs." << std::endl;
         return 1;
     }
 
-    // Shared flag for controlling the ack_listener thread
     std::atomic<bool> stop_ack_listener(false);
 
     auto start_time = std::chrono::steady_clock::now();
@@ -220,122 +201,111 @@ int main(int argc, char *argv[]) {
              << ", Duration of Experiment(s): " << duration << std::endl;
     log_file << "Log started at " << std::chrono::duration_cast<std::chrono::milliseconds>(start_time.time_since_epoch()).count() << " ms" << std::endl;
 
-    // Loop for receiveing ACKS
-    std::thread ack_listener([&]() {
-        char ack_buffer[sizeof(int)];
-        while (!stop_ack_listener) {
-            try {
-                UDPSocket::SockAddress sender_addr = {};
-                int bytes_received = socket.receivedata(ack_buffer, sizeof(ack_buffer), -1, sender_addr);
-                if (bytes_received == sizeof(int)) {
-                    handle_ack(ack_buffer, log_file); // Process the ACK
-                } else {
-                    std::cerr << "Unexpected ACK size received: " << bytes_received << " bytes" << std::endl;
-                }
-            } catch (const std::exception& e) {
-                std::cerr << "Error receiving ACK: " << e.what() << std::endl;
-            }
-        }
-        std::cout << "ACK listener thread terminated." << std::endl;
-    });
-
-    // Attack selection
+	std::thread ack_listener([&]() {
+    	char ack_buffer[sizeof(int)];
+    	while (!stop_ack_listener) {
+        	try {
+            	UDPSocket::SockAddress sender_addr = {};
+            	// Changed from -1 (infinite) to 100ms timeout
+            	int bytes_received = socket.receivedata(ack_buffer, sizeof(ack_buffer), 100, sender_addr);
+            	if (bytes_received == sizeof(int)) {
+                	handle_ack(ack_buffer, log_file);
+            	}
+        	} catch (const std::exception& e) {
+            	if (!stop_ack_listener) {
+                	std::cerr << "Error receiving ACK: " << e.what() << std::endl;
+            	}
+        	}
+    	}
+    	std::cout << "ACK listener thread terminated." << std::endl;
+	});
     if (attack_type == "-v") {
-        double packet_interval = 1.0 / ((9 * 1024 * 1024 / PACKET_SIZE) / 8); // 12 Mbps line rate
+        double packet_interval = 1.0 / ((9 * 1024 * 1024 / PACKET_SIZE) / 8);
         low_rate_volumetric_attack(socket, target_ip, target_port, packet_interval, duration, total_bytes_sent, log_file);
     } else {
-        int pre_attack_duration_ms = 4000; // 4 seconds
+        int pre_attack_duration_ms = 4000;
         double pre_attack_rate_mbps = 90;
         pre_attack_phase(socket, target_ip, target_port, pre_attack_duration_ms, pre_attack_rate_mbps, total_bytes_sent, log_file, last_log_time, seq_number);
     
-        // Custom burst attack logic
-        double burst_rate = calculate_burst_rate(burst_size, burst_duration); // bytes per ms
-        double burst_pkt_tx_delay = PACKET_SIZE / burst_rate; // using PACKET_SIZE defined as 1500 bytes by default
+        double burst_rate = calculate_burst_rate(burst_size, burst_duration);
+        double burst_pkt_tx_delay = PACKET_SIZE / burst_rate;
 
-        // Variables for controlling burst timing
         auto last_burst_time = std::chrono::steady_clock::now();
         auto last_send_time = std::chrono::steady_clock::now();
         auto last_log_time = std::chrono::steady_clock::now();
-        //int total_bytes_sent = 0;
         int burst_bytes_sent = 0;
         bool send_burst = false;
-        //bool log_packet_flag = true;
         int interval_bytes_sent = 0;
         long last_burst_end_time = 0;
 
         while (true) {
             auto now = std::chrono::steady_clock::now();
             long current_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-            auto elapsed_time = std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count(); // Convert to seconds
+            auto elapsed_time = std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count();
 
-            // Terminate after the specified duration
             if (elapsed_time >= duration) {
                 std::cout << "Experiment duration reached. Stopping sender." << std::endl;
                 break;
             }
 
-            // Check if it's time to start a new burst
-            if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_burst_time).count() > inter_burst_time) { 
-                // Send new burst
+            if (send_burst == false && std::chrono::duration_cast<std::chrono::milliseconds>(now - last_burst_time).count() >= inter_burst_time) {
                 send_burst = true;
                 last_burst_time = now;
                 last_burst_end_time = current_time_ms;
                 burst_bytes_sent = 0;
             }
 
-            // Send packets within the burst
             if (send_burst && std::chrono::duration_cast<std::chrono::milliseconds>(now - last_send_time).count() > burst_pkt_tx_delay) {
-                // Initialize packet directly
-                Packet packet;
-                strncpy(packet.data, std::string(PACKET_SIZE, 'X').c_str(), PACKET_SIZE);
-                packet.seq_number = seq_number++;
-                memcpy(packet.data, &packet.seq_number, sizeof(packet.seq_number));
-                packet.send_time = std::chrono::steady_clock::now();
-
-                // Track the packet in unacknowledged_packets
-                unacknowledged_packets[packet.seq_number] = packet;
-
-                if (!send_packet(socket, packet, target_ip, target_port)) { // Attempt to send packet
-                    std::cerr << "Error in sending packet. Aborting current burst." << std::endl;
-                    send_burst = false; // Exit the current burst if there's a send failure
-                    continue;
-                }
-
-                total_bytes_sent += PACKET_SIZE;
-                burst_bytes_sent += PACKET_SIZE;
-                interval_bytes_sent += PACKET_SIZE;
-
-                last_send_time = now;
-
-                // End burst if burst_size is reached
-                if (burst_bytes_sent >= burst_size) {
-                    burst_bytes_sent = 0;
-                    last_burst_time = now;
+                if(std::chrono::duration_cast<std::chrono::milliseconds>(now - last_burst_time).count() > burst_duration) {
                     send_burst = false;
                 }
+                else {
+                    Packet packet;
+                    std::memset(packet.data + HEADER_SIZE, 'X', PAYLOAD_SIZE);
+                    memcpy(packet.data, &seq_number, HEADER_SIZE);
+                    packet.send_time = std::chrono::steady_clock::now();
+
+                    unacknowledged_packets[seq_number] = packet;
+                    seq_number++;
+
+                    if (!send_packet(socket, packet, target_ip, target_port)) {
+                        std::cerr << "Error in sending packet. Aborting current burst." << std::endl;
+                        send_burst = false;
+                        continue;
+                    }
+
+                    total_bytes_sent += PACKET_SIZE;
+                    burst_bytes_sent += PACKET_SIZE;
+                    interval_bytes_sent += PACKET_SIZE;
+
+                    last_send_time = now;
+
+                    if (burst_bytes_sent >= burst_size) {
+                        burst_bytes_sent = 0;
+                        last_burst_time = now;
+                        send_burst = false;
+                    }
+                }
             }
+            
             auto now_ms = std::chrono::steady_clock::now();
             if (std::chrono::duration_cast<std::chrono::milliseconds>(now_ms - last_log_time).count() >= 1) {
                 log_file << std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count()
                         << " : " << total_bytes_sent << " : " << total_acked_bytes << std::endl;
                 last_log_time = now_ms;
-            } 
-
+            }
         }
     }
 
-    // Signal the ack_listener thread to stop
     stop_ack_listener = true;
 
-    // Wait for the thread to finish
     if (ack_listener.joinable()) {
         ack_listener.join();
     }
 
-    // End time after the loop completes
     auto end_time = std::chrono::steady_clock::now();
     double duration_seconds = std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time).count();
-    double average_throughput = (total_bytes_sent * 8) / duration_seconds; // in bits per second
+    double average_throughput = (total_bytes_sent * 8) / duration_seconds;
 
     log_file << "Average Throughput (bps): " << average_throughput << std::endl;
     log_file.close();

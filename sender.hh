@@ -6,6 +6,9 @@
 
 // Constants
 #define PACKET_SIZE 1500
+#define HEADER_SIZE sizeof(int)  // Size of seq_number
+#define PAYLOAD_SIZE (PACKET_SIZE - HEADER_SIZE)  // Actual data size
+#define DEFAULT_BURST_SIZE 1024
 #define DEFAULT_BURST_SIZE 1024 // Example burst size in bytes
 #define DEFAULT_BURST_DURATION 40 // Example burst duration in ms
 #define DEFAULT_INTER_BURST_TIME 100 // Example inter-burst interval in ms
@@ -13,7 +16,7 @@
 // Packet structure for sending data
 struct Packet {
     char data[PACKET_SIZE]; // Payload data
-    int seq_number; // Sequence number for tracking
+    //int seq_number; // Sequence number for tracking
     std::chrono::steady_clock::time_point send_time; // Timestamp for sending time
 };
 
