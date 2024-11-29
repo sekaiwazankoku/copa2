@@ -238,6 +238,9 @@ int main(int argc, char *argv[]) {
         int interval_bytes_sent = 0;
         long last_burst_end_time = 0;
 
+        int packets_sent_in_burst = 0; // Initialize burst packet counter
+
+
         while (true) {
             auto now = std::chrono::steady_clock::now();
             long current_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
@@ -247,17 +250,24 @@ int main(int argc, char *argv[]) {
                 std::cout << "Experiment duration reached. Stopping sender." << std::endl;
                 break;
             }
-
-            if (send_burst == false && std::chrono::duration_cast<std::chrono::milliseconds>(now - last_burst_time).count() >= inter_burst_time) {
+            
+            //debug statement
+            //std::cout << " Inter burst time: " << inter_burst_time << ", At time: " << std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() <<std::endl;
+            
+            if (send_burst == false && std::chrono::duration_cast<std::chrono::milliseconds>(now - last_burst_time).count() >= (inter_burst_time + burst_duration)) {
+                //std::cout << " Condition time: " << std::chrono::duration_cast<std::chrono::milliseconds>(now - last_burst_time).count() << std::endl;
+                //std::cout<< "Last burst time (in if loop): " << std::chrono::duration_cast<std::chrono::milliseconds>(last_burst_time.time_since_epoch()).count() << std::endl;
                 send_burst = true;
                 last_burst_time = now;
                 last_burst_end_time = current_time_ms;
                 burst_bytes_sent = 0;
             }
 
-            if (send_burst && std::chrono::duration_cast<std::chrono::milliseconds>(now - last_send_time).count() > burst_pkt_tx_delay) {
+            //if (send_burst && std::chrono::duration_cast<std::chrono::milliseconds>(now - last_send_time).count() > burst_pkt_tx_delay) {
+            if (send_burst && (std::chrono::duration<double, std::milli>(now - last_send_time).count() > burst_pkt_tx_delay)) {
                 if(std::chrono::duration_cast<std::chrono::milliseconds>(now - last_burst_time).count() > burst_duration) {
                     send_burst = false;
+                    //std::cout<< "Last burst time (in if-if loop): " << std::chrono::duration_cast<std::chrono::milliseconds>(last_burst_time.time_since_epoch()).count() << std::endl;
                 }
                 else {
                     Packet packet;
@@ -273,18 +283,19 @@ int main(int argc, char *argv[]) {
                         send_burst = false;
                         continue;
                     }
-
+                    //std::cout << "Debug print" << std::endl;
                     total_bytes_sent += PACKET_SIZE;
                     burst_bytes_sent += PACKET_SIZE;
                     interval_bytes_sent += PACKET_SIZE;
 
                     last_send_time = now;
 
-                    if (burst_bytes_sent >= burst_size) {
-                        burst_bytes_sent = 0;
-                        last_burst_time = now;
-                        send_burst = false;
-                    }
+                    // if (burst_bytes_sent >= burst_size) {
+                    //     burst_bytes_sent = 0;
+                    //     last_burst_time = now;
+                    //     send_burst = false;
+                    //     std::cout<< "Last burst time (in else loop): " << std::chrono::duration_cast<std::chrono::milliseconds>(last_burst_time.time_since_epoch()).count() << std::endl;
+                    // }
                 }
             }
             
@@ -304,7 +315,8 @@ int main(int argc, char *argv[]) {
     }
 
     auto end_time = std::chrono::steady_clock::now();
-    double duration_seconds = std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time).count();
+    //double duration_seconds = std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time).count();
+    double duration_seconds = (std::chrono::duration<double, std::milli>(end_time - start_time).count())/1000;
     double average_throughput = (total_bytes_sent * 8) / duration_seconds;
 
     log_file << "Average Throughput (bps): " << average_throughput << std::endl;
