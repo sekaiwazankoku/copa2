@@ -74,13 +74,4 @@ The sender binary includes built-in logging functionality to track attack behavi
 - Sender behavior over time.
 - ACK rate variations.
 
-## Contributions
-Contributions to improve the repository are welcome! Please fork the repository, make changes, and submit a pull request.
-
-## License
-This project is licensed under the [MIT License](LICENSE).
-
-## Contact
-For further questions or support, please open an issue in the repository or contact the maintainer.
-
 
